@@ -1,0 +1,33 @@
+# --- secrets / credentials (never commit) ---
+CREDENTIALS.txt
+*.cred
+*.secret
+*.key
+*.pem
+.env
+# the tool's run log (contains object names, URLs, timestamps)
+nagios_ccm_rshell.log
+*.log
+
+# --- extracted Nagios source, if copied into this folder ---
+# (default location is ~/Downloads/nagios-codebase, outside this repo)
+nagios-codebase/
+nagiosxi/
+nagios/
+*.tgz
+*.tar.gz
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+
+# --- editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
